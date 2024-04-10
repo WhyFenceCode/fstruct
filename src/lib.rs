@@ -21,8 +21,11 @@ pub enum FileSystemItem {
 
 impl FileSystemItem {
 
-    pub fn new() -> Self {
-        FileSystemItem::Root { items: HashMap::new() }
+    pub fn new(name: &str) -> Self {
+        let mut items = HashMap::new();
+        let root_folder = FileSystemItem::new_folder(name.to_string());
+        items.insert("root".to_string(), root_folder);
+        FileSystemItem::Root { items }
     }
 
     pub fn new_file(pathstring: String) -> Self {
@@ -53,17 +56,25 @@ impl FileSystemItem {
                 let item_name = match &item {
                     FileSystemItem::File { name, .. } => name,
                     FileSystemItem::Folder { name, .. } => name,
-                    FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
+                    _ => panic!("Cannot add root to a folder"),
                 };
                 items.insert(item_name.clone(), item);
             },
             FileSystemItem::Root { items } => {
-                let item_name = match &item {
-                    FileSystemItem::File { name, .. } => name,
-                    FileSystemItem::Folder { name, .. } => name,
-                    FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
-                };
-                items.insert(item_name.clone(), item);
+                // For the root, ensure that the item is added as a child of the root folder
+                // Assuming the root folder's name is "root"
+                if let Some(root_folder) = items.get_mut("root") {
+                    if let FileSystemItem::Folder { items: root_items, .. } = root_folder {
+                        let item_name = match &item {
+                            FileSystemItem::File { name, .. } => name,
+                            FileSystemItem::Folder { name, .. } => name,
+                            _ => panic!("Cannot add root to a folder"),
+                        };
+                        root_items.insert(item_name.clone(), item);
+                    }
+                } else {
+                    panic!("Root folder not found");
+                }
             },
             _ => panic!("Cannot add item to this type of FileSystemItem"),
         }
