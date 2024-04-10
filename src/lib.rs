@@ -48,13 +48,24 @@ impl FileSystemItem {
     }
 
     pub fn add_item(&mut self, item: FileSystemItem) {
-        if let FileSystemItem::Folder { items, .. } = self {
-            let item_name = match &item {
-                FileSystemItem::File { name, .. } => name,
-                FileSystemItem::Folder { name, .. } => name,
-                FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
-            };
-            items.insert(item_name.clone(), item);
+        match self {
+            FileSystemItem::Folder { items, .. } => {
+                let item_name = match &item {
+                    FileSystemItem::File { name, .. } => name,
+                    FileSystemItem::Folder { name, .. } => name,
+                    FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
+                };
+                items.insert(item_name.clone(), item);
+            },
+            FileSystemItem::Root { items } => {
+                let item_name = match &item {
+                    FileSystemItem::File { name, .. } => name,
+                    FileSystemItem::Folder { name, .. } => name,
+                    FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
+                };
+                items.insert(item_name.clone(), item);
+            },
+            _ => panic!("Cannot add item to this type of FileSystemItem"),
         }
     }
 
@@ -86,6 +97,30 @@ impl FileSystemItem {
 
     pub fn get_item_info(&self, path: &str) -> Vec<String> {
         if let FileSystemItem::Folder { items, .. } = self {
+            for item in items.values() {
+                if let FileSystemItem::File { name, extension, path: item_path } = item {
+                    if *item_path == path {
+                        return vec![
+                            "file".to_string(),
+                            name.to_string(),
+                            path.to_string(),
+                            extension.to_string(),
+                        ];
+                    }
+                } else if let FileSystemItem::Folder { name, path: item_path, open, items: sub_items } = item {
+                    if *item_path == path {
+                        let subfiles = sub_items.keys().cloned().collect::<Vec<String>>().join(", ");
+                        return vec![
+                            "folder".to_string(),
+                            name.to_string(),
+                            path.to_string(),
+                            open.to_string(),
+                            subfiles,
+                        ];
+                    }
+                }
+            }
+        } else if let FileSystemItem::Root { items } = self {
             for item in items.values() {
                 if let FileSystemItem::File { name, extension, path: item_path } = item {
                     if *item_path == path {
