@@ -14,9 +14,16 @@ pub enum FileSystemItem {
         open: bool,
         items: HashMap<String, FileSystemItem>,
     },
+    Root {
+        items: HashMap<String, FileSystemItem>,
+    }
 }
 
 impl FileSystemItem {
+
+    pub fn new() -> Self {
+        FileSystemItem::Root { items: HashMap::new() }
+    }
 
     pub fn new_file(pathstring: String) -> Self {
         let path = Path::new(&pathstring);
