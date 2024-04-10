@@ -52,6 +52,7 @@ impl FileSystemItem {
             let item_name = match &item {
                 FileSystemItem::File { name, .. } => name,
                 FileSystemItem::Folder { name, .. } => name,
+                FileSystemItem::Root { .. } => panic!("Cannot add item to root"),
             };
             items.insert(item_name.clone(), item);
         }
