@@ -1,161 +1,148 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::any::Any;
+use std::fmt;
 
+// Define the data structure for a file
 #[derive(Debug)]
-pub enum FileSystemItem {
-    File {
-        name: String,
-        extension: String,
-        path: String,
-    },
-    Folder {
-        name: String,
-        path: String,
-        open: bool,
-        items: HashMap<String, FileSystemItem>,
-    },
-    Root {
-        items: HashMap<String, FileSystemItem>,
+struct File {
+    name: String,
+    path: String,
+    extension: String,
+    args: Vec<String>,
+}
+
+// Define the data structure for a folder
+#[derive(Debug)]
+struct Folder {
+    name: String,
+    path: String,
+    open: bool,
+    args: Vec<String>,
+    contents: HashMap<String, Box<dyn Any>>,
+}
+
+// Define a trait for both File and Folder to allow polymorphic behavior
+trait FolderOrFile: Any {
+    fn get_name(&self) -> &str;
+    fn get_path(&self) -> &str;
+    fn get_args(&self) -> &Vec<String>;
+}
+
+impl FolderOrFile for File {
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    fn get_path(&self) -> &str {
+        &self.path
+    }
+
+    fn get_args(&self) -> &Vec<String> {
+        &self.args
     }
 }
 
-impl FileSystemItem {
-
-    pub fn new(name: &str) -> Self {
-        let mut items = HashMap::new();
-        let root_folder = FileSystemItem::new_folder(name.to_string());
-        items.insert("root".to_string(), root_folder);
-        FileSystemItem::Root { items }
+impl FolderOrFile for Folder {
+    fn get_name(&self) -> &str {
+        &self.name
     }
 
-    pub fn new_file(pathstring: String) -> Self {
-        let path = Path::new(&pathstring);
-        let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        let extension = path.extension().unwrap().to_str().unwrap().to_string();
-        FileSystemItem::File {
+    fn get_path(&self) -> &str {
+        &self.path
+    }
+
+    fn get_args(&self) -> &Vec<String> {
+        &self.args
+    }
+}
+
+// Manually implement Debug for FolderOrFile
+impl fmt::Debug for dyn FolderOrFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "FolderOrFile")
+    }
+}
+
+// Helper function to downcast a reference to Any to FolderOrFile
+fn downcast_folder_or_file<T: 'static>(any: Box<dyn Any>) -> Option<T> {
+    any.downcast().ok()
+}
+
+// Define the main structure
+#[derive(Debug)]
+struct FStruct {
+    root: Folder,
+}
+
+impl FStruct {
+    fn new(path: &str, args: Vec<String>) -> Self {
+        let name = path.split('/').last().unwrap().to_string();
+        let root = Folder {
             name,
+            path: path.to_string(),
+            open: false,
+            args,
+            contents: HashMap::new(),
+        };
+        FStruct { root }
+    }
+
+    fn new_folder(&mut self, path: &str, args: Vec<String>) {
+        let name = path.split('/').last().unwrap().to_string();
+        let folder = Folder {
+            name,
+            path: path.to_string(),
+            open: false,
+            args,
+            contents: HashMap::new(),
+        };
+        self.root.contents.insert(name, Box::new(folder));
+    }
+
+    fn new_file(&mut self, path: &str, args: Vec<String>) {
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = parts.last().unwrap().to_string();
+        let extension = parts.last().unwrap().split('.').last().unwrap().to_string();
+        let file = File {
+            name,
+            path: path.to_string(),
             extension,
-            path: pathstring,
-        }
+            args,
+        };
+        self.root.contents.insert(name, Box::new(file));
     }
 
-    pub fn new_folder(path: String) -> Self {
-        let path = Path::new(&path);
-        let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        FileSystemItem::Folder {
-            name,
-            path: path.to_str().unwrap().to_string(),
-            open: true,
-            items: HashMap::new(),
-        }
-    }
-
-    pub fn add_item(&mut self, item: FileSystemItem) {
-        match self {
-            FileSystemItem::Folder { items, .. } => {
-                let item_name = match &item {
-                    FileSystemItem::File { name, .. } => name,
-                    FileSystemItem::Folder { name, .. } => name,
-                    _ => panic!("Cannot add root to a folder"),
-                };
-                items.insert(item_name.clone(), item);
-            },
-            FileSystemItem::Root { items } => {
-                // For the root, ensure that the item is added as a child of the root folder
-                // Assuming the root folder's name is "root"
-                if let Some(root_folder) = items.get_mut("root") {
-                    if let FileSystemItem::Folder { items: root_items, .. } = root_folder {
-                        let item_name = match &item {
-                            FileSystemItem::File { name, .. } => name,
-                            FileSystemItem::Folder { name, .. } => name,
-                            _ => panic!("Cannot add root to a folder"),
-                        };
-                        root_items.insert(item_name.clone(), item);
-                    }
-                } else {
-                    panic!("Root folder not found");
-                }
-            },
-            _ => panic!("Cannot add item to this type of FileSystemItem"),
-        }
-    }
-
-    pub fn set_open_state(&mut self, path: &str, open: bool) {
-        if let FileSystemItem::Folder { path: folder_path, items, .. } = self {
-            if *folder_path == path {
-                if let FileSystemItem::Folder { open: folder_open, .. } = self {
-                    *folder_open = open;
-                }
-            } else {
-                for item in items.values_mut() {
-                    item.set_open_state(path, open);
-                }
+    fn set_open_state(&mut self, path: &str, open: bool) {
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = parts.last().unwrap().to_string();
+        if let Some(entry) = self.root.contents.get_mut(&name) {
+            if let Some(folder) = downcast_folder_or_file::<Folder>(entry.clone()) {
+                folder.open = open;
+                *entry = Box::new(folder);
             }
         }
     }
 
-    pub fn remove_item(&mut self, path: &str) {
-        if let FileSystemItem::Folder { items, .. } = self {
-            items.retain(|_, item| {
-                if let FileSystemItem::Folder { path: item_path, .. } = item {
-                    *item_path != path
-                } else {
-                    true
-                }
-            });
+    fn get_open_state(&self, path: &str) -> Option<bool> {
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = parts.last().unwrap().to_string();
+        if let Some(entry) = self.root.contents.get(&name) {
+            if let Some(folder) = downcast_folder_or_file::<Folder>(entry.clone()) {
+                return Some(folder.open);
+            }
         }
+        None
     }
 
-    pub fn get_item_info(&self, path: &str) -> Vec<String> {
-        if let FileSystemItem::Folder { items, .. } = self {
-            for item in items.values() {
-                if let FileSystemItem::File { name, extension, path: item_path } = item {
-                    if *item_path == path {
-                        return vec![
-                            "file".to_string(),
-                            name.to_string(),
-                            path.to_string(),
-                            extension.to_string(),
-                        ];
-                    }
-                } else if let FileSystemItem::Folder { name, path: item_path, open, items: sub_items } = item {
-                    if *item_path == path {
-                        let subfiles = sub_items.keys().cloned().collect::<Vec<String>>().join(", ");
-                        return vec![
-                            "folder".to_string(),
-                            name.to_string(),
-                            path.to_string(),
-                            open.to_string(),
-                            subfiles,
-                        ];
-                    }
-                }
-            }
-        } else if let FileSystemItem::Root { items } = self {
-            for item in items.values() {
-                if let FileSystemItem::File { name, extension, path: item_path } = item {
-                    if *item_path == path {
-                        return vec![
-                            "file".to_string(),
-                            name.to_string(),
-                            path.to_string(),
-                            extension.to_string(),
-                        ];
-                    }
-                } else if let FileSystemItem::Folder { name, path: item_path, open, items: sub_items } = item {
-                    if *item_path == path {
-                        let subfiles = sub_items.keys().cloned().collect::<Vec<String>>().join(", ");
-                        return vec![
-                            "folder".to_string(),
-                            name.to_string(),
-                            path.to_string(),
-                            open.to_string(),
-                            subfiles,
-                        ];
-                    }
-                }
-            }
-        }
-        vec![]
+    fn get_data(&self, path: &str) -> Option<&Box<dyn FolderOrFile>> {
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = parts.last().unwrap().to_string();
+        self.root.contents.get(&name)
+    }
+
+    fn remove(&mut self, path: &str) {
+        let parts: Vec<&str> = path.split('/').collect();
+        let name = parts.last().unwrap().to_string();
+        self.root.contents.remove(&name);
     }
 }
