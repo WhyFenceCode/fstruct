@@ -49,8 +49,8 @@ impl FileSystemItem {
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
         let folder_path = path.parent().unwrap().to_str().unwrap().to_string();
         FileSystemItem::Folder {
-            name,
-            path: folder_path,
+            name: name.clone(),
+            path: folder_path + "/" + &name,
             open: false,
             args,
             items: HashMap::new(),
